@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlashKanban — 1ファイルWebアプリ</title>
+  <meta name="description" content="ドラッグ&ドロップ対応の1ファイルKanban。検索・タグ・Markdownプレビュー、暗黒モード、ローカル保存、インポート/エクスポート対応。" />
+  <meta name="theme-color" content="#0f172a" />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-soft: #10172a;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --brand: #60a5fa;
+      --accent: #22d3ee;
+      --ok: #34d399;
+      --warn: #f59e0b;
+      --danger: #f87171;
+      --card: #111827;
+      --card-border: #1f2937;
+      --input: #0b1220;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    [data-theme="light"]{
+      --bg: #f8fafc;
+      --bg-soft: #eef2ff;
+      --panel: #ffffff;
+      --panel-2: #f1f5f9;
+      --text: #111827;
+      --muted: #6b7280;
+      --brand: #2563eb;
+      --accent: #0891b2;
+      --ok: #059669;
+      --warn: #b45309;
+      --danger: #dc2626;
+      --card: #ffffff;
+      --card-border: #e5e7eb;
+      --input: #ffffff;
+      --shadow: 0 10px 25px rgba(2,6,23,.08);
+    }
+    * { box-sizing: border-box }
+    html, body { height: 100% }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 600px at 10% -10%, #0b1222 0%, var(--bg) 50%) no-repeat fixed;
+      color: var(--text);
+      transition: background .3s ease, color .3s ease;
+    }
+    header {
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: saturate(1.1) blur(8px);
+      background: linear-gradient(180deg, rgba(15,23,42,.85), rgba(15,23,42,.55));
+      border-bottom: 1px solid var(--card-border);
+    }
+    [data-theme="light"] header {
+      background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.65));
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap }
+    .grow { flex: 1 }
+    .brand {
+      font-weight: 800; letter-spacing: .3px; display: flex; align-items: center; gap: 10px;
+    }
+    .brand .logo {
+      width: 28px; height: 28px; border-radius: 10px;
+      background: conic-gradient(from 40deg at 50% 50%, var(--brand), var(--accent), var(--ok), var(--brand));
+      box-shadow: var(--shadow);
+    }
+    input[type="search"], input[type="text"], input[type="date"] {
+      background: var(--input); color: var(--text); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 10px 12px; outline: none; width: 100%;
+    }
+    .btn {
+      background: linear-gradient(180deg, var(--brand), #1f6cd9);
+      color: white; border: 0; padding: 10px 14px; border-radius: 12px; cursor: pointer;
+      font-weight: 700; box-shadow: var(--shadow);
+    }
+    .btn.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--card-border); font-weight: 600 }
+    .btn.ghost { background: transparent; border: 1px dashed var(--card-border); color: var(--muted) }
+    .btn.warn { background: linear-gradient(180deg, var(--warn), #b45309) }
+    .btn.ok { background: linear-gradient(180deg, var(--ok), #059669) }
+    .btn:disabled { opacity: .6; cursor: not-allowed }
+    main { max-width: 1200px; margin: 12px auto 40px; padding: 0 16px }
+    .boards {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;
+    }
+    @media (max-width: 900px) {
+      .boards { grid-template-columns: 1fr }
+    }
+    .col {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--card-border); border-radius: 18px; padding: 12px; min-height: 240px;
+    }
+    .col h2 { margin: 4px 6px 8px; font-size: 16px; display: flex; gap: 8px; align-items: center }
+    .dropzone {
+      border: 2px dashed transparent; border-radius: 14px; padding: 6px;
+      transition: border-color .2s ease, background .2s ease;
+      min-height: 150px;
+    }
+    .dropzone.dragover { border-color: var(--brand); background: rgba(96,165,250,.08) }
+    .card {
+      background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 10px 12px;
+      margin: 10px 0; box-shadow: var(--shadow); cursor: grab;
+    }
+    .card:active { cursor: grabbing }
+    .card h3 { margin: 0 0 6px; font-size: 14px }
+    .muted { color: var(--muted); font-size: 12px }
+    .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px }
+    .tag {
+      font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--card-border);
+      background: rgba(96,165,250,.08);
+    }
+    .due { font-size: 12px; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--card-border) }
+    .due.soon { background: rgba(245,158,11,.12) }
+    .due.over { background: rgba(248,113,113,.12) }
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
+    .hidden { display: none !important }
+    dialog {
+      border: 1px solid var(--card-border); background: var(--panel); color: var(--text);
+      border-radius: 16px; box-shadow: var(--shadow); width: min(880px, 96vw); padding: 0;
+    }
+    dialog::backdrop { background: rgba(2,6,23,.6) }
+    .modal-head { padding: 14px 16px; border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center }
+    .modal-body { padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px }
+    @media (max-width: 820px){ .modal-body { grid-template-columns: 1fr } }
+    textarea {
+      width: 100%; min-height: 240px; resize: vertical;
+      background: var(--input); color: var(--text); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 12px;
+    }
+    .preview {
+      background: var(--panel-2); border: 1px solid var(--card-border); border-radius: 12px; padding: 12px; overflow: auto;
+    }
+    .preview h1, .preview h2, .preview h3 { margin: .6em 0 .4em }
+    .preview code {
+      padding: 2px 6px; border-radius: 6px; background: #0b1220; border: 1px solid var(--card-border);
+    }
+    [data-theme="light"] .preview code { background: #f1f5f9 }
+    .footer {
+      display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-top: 1px solid var(--card-border);
+    }
+    .small { font-size: 12px }
+    .link { color: var(--brand); font-weight: 700; text-decoration: none }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="row">
+        <div class="brand">
+          <div class="logo"></div>
+          <div>FlashKanban</div>
+        </div>
+        <div class="grow"></div>
+        <div class="toolbar">
+          <input id="search" type="search" placeholder="検索（タイトル、タグ、本文）…" />
+          <button id="newCard" class="btn">＋ 新規カード</button>
+          <button id="importBtn" class="btn secondary">インポート</button>
+          <button id="exportBtn" class="btn secondary">エクスポート</button>
+          <button id="themeBtn" class="btn ghost" title="ダーク/ライト">🌓</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="boards">
+      <section class="col" data-col="backlog">
+        <h2>Backlog（やること）</h2>
+        <div class="dropzone" data-zone="backlog"></div>
+        <button class="btn ghost add-here" data-target="backlog">＋ ここに追加</button>
+      </section>
+      <section class="col" data-col="doing">
+        <h2>In Progress（進行中）</h2>
+        <div class="dropzone" data-zone="doing"></div>
+        <button class="btn ghost add-here" data-target="doing">＋ ここに追加</button>
+      </section>
+      <section class="col" data-col="done">
+        <h2>Done（完了）</h2>
+        <div class="dropzone" data-zone="done"></div>
+        <button class="btn ghost add-here" data-target="done">＋ ここに追加</button>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="editor">
+    <form method="dialog">
+      <div class="modal-head">
+        <strong>カード編集</strong>
+        <div class="toolbar">
+          <button type="button" id="delCard" class="btn warn">削除</button>
+          <button type="submit" class="btn ok">保存</button>
+          <button type="button" id="closeEditor" class="btn secondary">閉じる</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div>
+          <div class="row" style="gap:8px; margin-bottom:8px">
+            <input id="titleInput" type="text" placeholder="タイトル" />
+            <input id="dateInput" type="date" />
+          </div>
+          <input id="tagsInput" type="text" placeholder="タグ（カンマ区切り）" />
+          <textarea id="mdInput" placeholder="# Markdown対応
+
+**太字**、*斜体*、`コード`、[リンク](https://example.com)
+- 箇条書き
+1. 番号付き
+
+貼り付け（Ctrl/⌘+V）でもカード追加できます。
+"></textarea>
+        </div>
+        <div class="preview" id="mdPreview"></div>
+      </div>
+      <div class="footer">
+        <div class="small">ローカルに自動保存されます（ブラウザのLocalStorage）。</div>
+        <div class="small">ショートカット: <strong>N</strong>新規 / <strong>/</strong>検索 / <strong>Esc</strong>閉じる</div>
+      </div>
+    </form>
+  </dialog>
+
+  <input id="importFile" type="file" accept="application/json" class="hidden" />
+
+  <script>
+    // --- Utility ---
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+    const uid = () => Math.random().toString(36).slice(2,9);
+    const todayStr = () => new Date().toISOString().slice(0,10);
+
+    // --- State ---
+    const STORAGE_KEY = "flashkanban.v1";
+    /** @type {{cards: Array<{id:string,title:string,md:string,tags:string[],due:string|null,col:'backlog'|'doing'|'done',updated:number}>}} */
+    let state = { cards: [] };
+
+    // --- Markdown (tiny) ---
+    function mdToHtml(md){
+      if(!md) return "";
+      // escape
+      md = md.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      // code `code`
+      md = md.replace(/`([^`]+)`/g, "<code>$1</code>");
+      // bold **text**
+      md = md.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      // italic *text*
+      md = md.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      // headings
+      md = md.replace(/^### (.*)$/gm,"<h3>$1</h3>");
+      md = md.replace(/^## (.*)$/gm,"<h2>$1</h2>");
+      md = md.replace(/^# (.*)$/gm,"<h1>$1</h1>");
+      // links [text](url)
+      md = md.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a class="link" target="_blank" rel="noopener noreferrer" href="$2">$1</a>');
+      // ordered list
+      md = md.replace(/^\d+\.\s+(.*)$/gm, "<ol><li>$1</li></ol>");
+      md = md.replace(/<\/ol>\n<ol>/g, ""); // merge
+      // unordered list
+      md = md.replace(/^- (.*)$/gm, "<ul><li>$1</li></ul>");
+      md = md.replace(/<\/ul>\n<ul>/g, ""); // merge
+      // paragraphs
+      md = md.split(/\n{2,}/).map(p => {
+        if(/^<(h\d|ul|ol)/.test(p.trim())) return p;
+        return "<p>"+p.replace(/\n/g,"<br/>")+"</p>";
+      }).join("\n");
+      return md;
+    }
+
+    // --- Persistence ---
+    function load(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(raw) state = JSON.parse(raw);
+      }catch(e){ console.warn("load failed", e) }
+      render();
+    }
+    function save(){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    // --- Rendering ---
+    function render(){
+      const q = $("#search").value.trim().toLowerCase();
+      const zones = $$(".dropzone");
+      zones.forEach(z => z.innerHTML = "");
+      const now = new Date();
+      for(const card of state.cards){
+        if(q){
+          const hay = (card.title + " " + card.md + " " + card.tags.join(" ")).toLowerCase();
+          if(!hay.includes(q)) continue;
+        }
+        const el = document.createElement("article");
+        el.className = "card";
+        el.draggable = true;
+        el.dataset.id = card.id;
+        el.innerHTML = `
+          <h3>${escapeHtml(card.title || "(無題)")}</h3>
+          <div class="muted">${escapeHtml(card.md).slice(0,120)}</div>
+          <div class="row" style="margin-top:8px; gap:8px; align-items:center; flex-wrap:wrap">
+            <div class="tags">${card.tags.map(t=>`<span class="tag">#${escapeHtml(t)}</span>`).join("")}</div>
+            ${card.due ? dueBadge(card.due, now) : ""}
+            <div class="grow"></div>
+            <button class="btn secondary" data-edit="${card.id}">編集</button>
+          </div>
+        `;
+        el.addEventListener("dragstart", onDragStart);
+        el.addEventListener("dblclick", () => openEditor(card.id));
+        const zone = $(`.dropzone[data-zone="${card.col}"]`);
+        zone.appendChild(el);
+      }
+    }
+
+    function escapeHtml(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) }
+    function dueBadge(dueStr, now){
+      const d = new Date(dueStr+"T23:59:59");
+      let cls = "due";
+      if(d < now) cls += " over";
+      else if((d - now)/(1000*60*60*24) < 3) cls += " soon";
+      return `<span class="${cls}">期日: ${dueStr}</span>`;
+    }
+
+    // --- DnD ---
+    let dragId = null;
+    function onDragStart(e){ dragId = e.currentTarget.dataset.id }
+    $$(".dropzone").forEach(z => {
+      z.addEventListener("dragover", e => { e.preventDefault(); z.classList.add("dragover") });
+      z.addEventListener("dragleave", () => z.classList.remove("dragover"));
+      z.addEventListener("drop", e => {
+        e.preventDefault(); z.classList.remove("dragover");
+        const id = dragId; dragId = null;
+        const col = z.dataset.zone;
+        const card = state.cards.find(c => c.id === id);
+        if(card){ card.col = col; card.updated = Date.now(); save(); render(); }
+      });
+    });
+
+    // --- Editor Modal ---
+    const editor = $("#editor");
+    let editingId = null;
+    function openEditor(id=null, presetCol="backlog"){
+      editingId = id;
+      let card = id ? state.cards.find(c=>c.id===id) : null;
+      if(!card){
+        card = { id: uid(), title:"", md:"", tags:[], due:null, col: presetCol, updated:Date.now() };
+        state.cards.unshift(card);
+        save();
+      }
+      $("#titleInput").value = card.title;
+      $("#mdInput").value = card.md;
+      $("#tagsInput").value = card.tags.join(", ");
+      $("#dateInput").value = card.due || "";
+      $("#mdPreview").innerHTML = mdToHtml(card.md);
+      editor.showModal();
+    }
+    $("#mdInput").addEventListener("input", e => { $("#mdPreview").innerHTML = mdToHtml(e.target.value) });
+
+    $("#delCard").addEventListener("click", () => {
+      if(!editingId) return;
+      state.cards = state.cards.filter(c=>c.id!==editingId);
+      save(); render(); editor.close();
+    });
+    $("#closeEditor").addEventListener("click", () => editor.close());
+
+    editor.addEventListener("close", () => {
+      // if canceled, but card may be empty → clean up empties
+      state.cards = state.cards.filter(c => (c.title || c.md || (c.tags&&c.tags.length) || c.due));
+      save(); render();
+    });
+
+    editor.querySelector("form").addEventListener("submit", e => {
+      e.preventDefault();
+      if(!editingId) return;
+      const card = state.cards.find(c=>c.id===editingId);
+      if(!card) return;
+      card.title = $("#titleInput").value.trim();
+      card.md = $("#mdInput").value;
+      const tags = $("#tagsInput").value.split(",").map(s=>s.trim()).filter(Boolean);
+      card.tags = Array.from(new Set(tags));
+      card.due = $("#dateInput").value || null;
+      card.updated = Date.now();
+      save(); render(); editor.close();
+    });
+
+    // --- Controls ---
+    $("#newCard").addEventListener("click", ()=>openEditor(null, "backlog"));
+    $$(".add-here").forEach(b => b.addEventListener("click", ()=>openEditor(null, b.dataset.target)));
+    $("#search").addEventListener("input", render);
+    document.addEventListener("keydown", e => {
+      if(e.key.toLowerCase() === "n" && !e.metaKey && !e.ctrlKey){ openEditor(); }
+      if(e.key === "/"){ e.preventDefault(); $("#search").focus() }
+      if(e.key === "Escape"){ if(editor.open) editor.close() }
+    });
+
+    // Paste to add quick card
+    document.addEventListener("paste", e => {
+      const text = (e.clipboardData || window.clipboardData).getData("text");
+      if(!text) return;
+      const c = { id: uid(), title: text.split("\n")[0].slice(0,80), md: text, tags:[], due:null, col:"backlog", updated:Date.now() };
+      state.cards.unshift(c); save(); render();
+    });
+
+    // Import/Export
+    $("#exportBtn").addEventListener("click", ()=>{
+      const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "flashkanban-data.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    $("#importBtn").addEventListener("click", ()=>$("#importFile").click());
+    $("#importFile").addEventListener("change", e => {
+      const file = e.target.files[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try{
+          const data = JSON.parse(reader.result);
+          if(data && Array.isArray(data.cards)){
+            state = data; save(); render();
+            alert("インポート完了！");
+          } else {
+            alert("フォーマットが違います。");
+          }
+        }catch(err){ alert("読み込みに失敗しました。"); }
+      };
+      reader.readAsText(file, "utf-8");
+      e.target.value = "";
+    });
+
+    // Theme toggle
+    const THEME_KEY="flashkanban.theme";
+    function applyTheme(t){ document.documentElement.setAttribute("data-theme", t); localStorage.setItem(THEME_KEY, t) }
+    $("#themeBtn").addEventListener("click", ()=>{
+      const cur = localStorage.getItem(THEME_KEY) || "dark";
+      applyTheme(cur==="dark"?"light":"dark");
+    });
+
+    // Initial
+    (function init(){
+      const t = localStorage.getItem(THEME_KEY) || "dark";
+      applyTheme(t);
+      load();
+      if(state.cards.length===0){
+        // seed demo
+        state.cards = [
+          {id:uid(), title:"ようこそ！", md:"FlashKanbanは**1ファイル**で動く革新的なWebアプリです。まずはカードを編集してみましょう。", tags:["intro"], due: todayStr(), col:"backlog", updated:Date.now()},
+          {id:uid(), title:"ドラッグ&ドロップ", md:"カードを掴んで列へ移動できます。スマホは長押し→ドラッグ。", tags:["tips"], due: null, col:"doing", updated:Date.now()},
+          {id:uid(), title:"データの出し入れ", md:"右上の**エクスポート**でJSON保存、**インポート**で復元できます。", tags:["backup"], due: null, col:"done", updated:Date.now()},
+        ];
+        save(); render();
+      }
+    })();
+  </script>
+</body>
+</html>
